@@ -1,7 +1,8 @@
 _G.TargetNames = {
     "Dragonfly",
     "Queen Bee",
-    "Red Fox"
+    "Red Fox",
+    "Disco Bee"
 }
 
 local DataSer = require(game:GetService("ReplicatedStorage").Modules.DataService)
@@ -9,48 +10,44 @@ local TeleportService = game:GetService("TeleportService")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local StarterGui = game:GetService("StarterGui")
-local TweenService = game:GetService("TweenService") -- Get the TweenService for animations
+local TweenService = game:GetService("TweenService")
+local Lighting = game:GetService("Lighting")
 
-local rejoinDelay = 1 -- Delay before attempting to rejoin (seconds)
--- Formal kick message, now includes a placeholder for attempt number
+local rejoinDelay = 1
 local kickMessageBase = "🌐 System Notification: No designated target eggs were detected in this server. Initiating automatic server relocation. \n 🟢 QN: Server-Finding... attempt(%d)"
 
--- Create the main ScreenGui for all GUI elements
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "EggHunterGUI"
 screenGui.ResetOnSpawn = false
 
--- Create the main status TextLabel (top-left)
 local textLabel = Instance.new("TextLabel")
 textLabel.Name = "StatusLabel"
-textLabel.Size = UDim2.new(0, 250, 0, 100) -- Adjust size as needed
-textLabel.Position = UDim2.new(0.01, 0, 0.05, 0) -- Top-left corner (1% from left, 5% from top)
-textLabel.BackgroundColor3 = Color3.fromRGB(30, 30, 30) -- Dark background
-textLabel.BackgroundTransparency = 0.7 -- Slightly transparent
-textLabel.TextColor3 = Color3.fromRGB(240, 240, 240) -- Light gray text
-textLabel.Font = Enum.Font.SourceSansBold -- Bold font
+textLabel.Size = UDim2.new(0, 250, 0, 100)
+textLabel.Position = UDim2.new(0.01, 0, 0.05, 0)
+textLabel.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+textLabel.BackgroundTransparency = 0.7
+textLabel.TextColor3 = Color3.fromRGB(240, 240, 240)
+textLabel.Font = Enum.Font.SourceSansBold
 textLabel.TextSize = 18
 textLabel.TextWrapped = true
 textLabel.TextXAlignment = Enum.TextXAlignment.Left
 textLabel.TextYAlignment = Enum.TextYAlignment.Top
-textLabel.Text = "🔍 Target Eggs: " .. table.concat(_G.TargetNames, ", ") .. "\nStatus: Initializing\nPowered by dyumra" -- Initial text
-textLabel.BorderSizePixel = 0 -- Remove border for cleaner look
-textLabel.ClipsDescendants = true -- Enable rounded corners
+textLabel.Text = "🔍 Target Eggs: " .. table.concat(_G.TargetNames, ", ") .. "\nStatus: Initializing\nPowered by dyumra"
+textLabel.BorderSizePixel = 0
+textLabel.ClipsDescendants = true
 textLabel.Parent = screenGui
 
-local corner = Instance.new("UICorner") -- Create rounded corners for StatusLabel
-corner.CornerRadius = UDim.new(0, 10) -- Set corner radius
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, 10)
 corner.Parent = textLabel
 
--- NEW: Create TextLabel for individual egg status (top-right)
 local eggStatusLabel = Instance.new("TextLabel")
 eggStatusLabel.Name = "EggStatusLabel"
-eggStatusLabel.Size = UDim2.new(0, 200, 0, 100) -- Adjust size as needed
--- Position: 1 (right edge) - width - offset (10 pixels from right edge)
+eggStatusLabel.Size = UDim2.new(0, 200, 0, 100)
 eggStatusLabel.Position = UDim2.new(1, -210, 0.05, 0)
 eggStatusLabel.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 eggStatusLabel.BackgroundTransparency = 0.7
-eggStatusLabel.TextColor3 = Color3.fromRGB(255, 255, 255) -- Initial white, will be animated
+eggStatusLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 eggStatusLabel.Font = Enum.Font.SourceSansBold
 eggStatusLabel.TextSize = 16
 eggStatusLabel.TextWrapped = true
@@ -60,150 +57,207 @@ eggStatusLabel.BorderSizePixel = 0
 eggStatusLabel.ClipsDescendants = true
 eggStatusLabel.Parent = screenGui
 
-local eggStatusCorner = Instance.new("UICorner") -- Create rounded corners for EggStatusLabel
+local eggStatusCorner = Instance.new("UICorner")
 eggStatusCorner.CornerRadius = UDim.new(0, 10)
 eggStatusCorner.Parent = eggStatusLabel
 
--- Parent the ScreenGui to StarterGui so it appears on the player's screen
+local targetDisplayLabel = Instance.new("TextLabel")
+targetDisplayLabel.Name = "TargetDisplayLabel"
+targetDisplayLabel.Size = UDim2.new(0, 300, 0, 50)
+targetDisplayLabel.Position = UDim2.new(0.01, 0, 0.95, -50)
+targetDisplayLabel.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+targetDisplayLabel.BackgroundTransparency = 0.7
+targetDisplayLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+targetDisplayLabel.Font = Enum.Font.SourceSansBold
+targetDisplayLabel.TextSize = 24
+targetDisplayLabel.TextWrapped = true
+targetDisplayLabel.TextXAlignment = Enum.TextXAlignment.Center
+targetDisplayLabel.TextYAlignment = Enum.TextYAlignment.Center
+targetDisplayLabel.BorderSizePixel = 0
+targetDisplayLabel.ClipsDescendants = true
+targetDisplayLabel.Parent = screenGui
+
+local targetDisplayCorner = Instance.new("UICorner")
+targetDisplayCorner.CornerRadius = UDim.new(0, 10)
+targetDisplayCorner.Parent = targetDisplayLabel
+
 screenGui.Parent = StarterGui
 
--- Initialize a map to store the found/not found status for each target egg
 local eggFoundStatus = {}
 for _, targetName in ipairs(_G.TargetNames) do
-    eggFoundStatus[targetName] = "❌" -- Initially mark all as not found (❌)
+    eggFoundStatus[targetName] = "❌"
 end
 
--- Function to update the text of the individual egg status display
+local highlightColors = {
+    ["Bug Egg"] = Color3.fromRGB(0, 255, 0),    -- Green for Bug Egg (Dragonfly)
+    ["Anti Bee Egg"] = Color3.fromRGB(255, 0, 0), -- Red for Anti Bee Egg (Disco Bee)
+    ["Bee Egg"] = Color3.fromRGB(255, 165, 0)   -- Orange for Bee Egg (Queen Bee)
+}
+
+local activeHighlights = {}
+
 local function updateEggStatusDisplay()
     local statusText = ""
     for _, targetName in ipairs(_G.TargetNames) do
-        -- Concatenate the egg name with its current status (✅ or ❌)
         statusText = statusText .. targetName .. ": " .. eggFoundStatus[targetName] .. "\n"
     end
     eggStatusLabel.Text = statusText
 end
 
-updateEggStatusDisplay() -- Call once to set initial text for EggStatusLabel
+updateEggStatusDisplay()
 
--- NEW: Function to animate TextLabel color, creating a smooth RGB effect
-local function animateTextColor(labelToAnimate)
-    -- Define a sequence of colors for the animation
+local function animateTextColor(labelToAnimate, isRainbow)
     local colors = {
-        Color3.fromRGB(255, 0, 0),    -- Red
-        Color3.fromRGB(255, 255, 0),  -- Yellow
-        Color3.fromRGB(0, 255, 0),    -- Green
-        Color3.fromRGB(0, 255, 255),  -- Cyan
-        Color3.fromRGB(0, 0, 255),    -- Blue
-        Color3.fromRGB(255, 0, 255)   -- Magenta
+        Color3.fromRGB(255, 0, 0),
+        Color3.fromRGB(255, 255, 0),
+        Color3.fromRGB(0, 255, 0),
+        Color3.fromRGB(0, 255, 255),
+        Color3.fromRGB(0, 0, 255),
+        Color3.fromRGB(255, 0, 255)
     }
-    -- TweenInfo defines how the animation will play (duration, easing style, direction)
     local tweenInfo = TweenInfo.new(
-        2, -- Duration of each color transition in seconds
-        Enum.EasingStyle.Linear, -- Smooth, linear transition
-        Enum.EasingDirection.Out -- Easing direction
+        2,
+        Enum.EasingStyle.Linear,
+        Enum.EasingDirection.Out
     )
 
-    -- Use task.spawn to run this animation in a separate thread, so it doesn't block the main script
     task.spawn(function()
-        while task.wait() do -- Loop indefinitely for continuous animation
-            for i = 1, #colors do
-                local nextColorIndex = (i % #colors) + 1 -- Calculate the index of the next color in the sequence
-                -- Define the target properties for the tween
-                local goal = { TextColor3 = colors[nextColorIndex] }
-                -- Create a new tween for the label's TextColor3 property
-                local tween = TweenService:Create(labelToAnimate, tweenInfo, goal)
-                tween:Play() -- Start the tween animation
-                tween.Completed:Wait() -- Wait for the current tween to complete before starting the next
+        while task.wait() do
+            if isRainbow and labelToAnimate.Parent then
+                for i = 1, #colors do
+                    local nextColorIndex = (i % #colors) + 1
+                    local goal = { TextColor3 = colors[nextColorIndex] }
+                    local tween = TweenService:Create(labelToAnimate, tweenInfo, goal)
+                    tween:Play()
+                    tween.Completed:Wait()
+                end
+            else
+                break
             end
         end
     end)
 end
 
-animateTextColor(eggStatusLabel) -- Start animating the text color of the new EggStatusLabel
+animateTextColor(eggStatusLabel, true)
 
--- Function to send in-game notifications using StarterGui:SetCore
 local function sendNotification(title, text, duration, icon)
     StarterGui:SetCore("SendNotification", {
         Title = title,
         Text = text,
-        Duration = duration or 5, -- Default duration is 5 seconds
-        Icon = icon or "" -- Optional icon asset ID
+        Duration = duration or 5,
+        Icon = icon or ""
     })
-end
+}
 
--- Counter for rejoin attempts, used in the kick message and notifications
+local function setHighlight(part, color)
+    if activeHighlights[part] then
+        activeHighlights[part]:Destroy()
+        activeHighlights[part] = nil
+    end
+
+    if part and color then
+        local highlight = Instance.new("Highlight")
+        highlight.FillColor = color
+        highlight.OutlineColor = color
+        highlight.Parent = part
+        activeHighlights[part] = highlight
+    end
+}
+
 local rejoinAttempts = 0
 
--- Main script loop: Continuously scan, rejoin, or stop if target found
 while true do
-    local foundAnyTargetEggInCurrentScan = false -- Flag to check if any target egg was found in this specific scan iteration
-    local foundEggNameInCurrentScan = "" -- Stores the name of the first target egg found in this scan
+    local foundAnyTargetEggInCurrentScan = false
+    local foundEggNameInCurrentScan = ""
+    local currentTargetEggName = "None"
 
-    -- Reset all individual egg statuses to 'not found' at the beginning of each server scan
+    for part, highlight in pairs(activeHighlights) do
+        highlight:Destroy()
+    end
+    activeHighlights = {}
+
     for k in pairs(eggFoundStatus) do
         eggFoundStatus[k] = "❌"
     end
 
-    -- Update main status label and send notification for scanning
     textLabel.Text = "Target Eggs: " .. table.concat(_G.TargetNames, ", ") .. "\nStatus: Scanning Server...\nPowered by dyumra"
     sendNotification("⚙️ System Notification", "Commencing server scan for target eggs.", 3, "rbxassetid://6034177218")
 
-    -- Robust error handling for DataService:GetData()
     local data = DataSer:GetData()
     if data and data.SavedObjects then
-        -- Iterate through all saved objects to find PetEggs
         for _, obj in pairs(data.SavedObjects) do
             if obj.ObjectType == "PetEgg" then
-                -- Check if the egg has valid data and can be hatched
                 if obj.Data.RandomPetData ~= nil and obj.Data.CanHatch then
-                    -- Check if the egg's name matches any of our target names
+                    local eggDisplayName = obj.Data.RandomPetData.DisplayName or obj.Data.RandomPetData.Name
+
                     for _, targetName in ipairs(_G.TargetNames) do
-                        if obj.Data.RandomPetData.Name == targetName then
-                            foundAnyTargetEggInCurrentScan = true -- Mark that at least one target was found
-                            foundEggNameInCurrentScan = targetName -- Store the name of the found egg
-                            eggFoundStatus[targetName] = "✅" -- Update specific egg status to 'found'
-                            -- Do NOT break here, continue checking if other target eggs are also present in this server
+                        if eggDisplayName == targetName then
+                            foundAnyTargetEggInCurrentScan = true
+                            foundEggNameInCurrentScan = targetName
+                            eggFoundStatus[targetName] = "✅"
+
+                            local highlightColor = highlightColors[obj.Data.RandomPetData.Name]
+                            if highlightColor then
+                                setHighlight(obj.Model, highlightColor)
+                            end
+
+                            if targetName == "Queen Bee" then
+                                currentTargetEggName = "Queen Bee"
+                                targetDisplayLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+                                animateTextColor(targetDisplayLabel, true)
+                            elseif targetName == "Disco Bee" then -- Handle Disco Bee for highlighting if its part name is unique
+                                currentTargetEggName = "Disco Bee"
+                                targetDisplayLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+                                animateTextColor(targetDisplayLabel, true)
+                            end
                         end
                     end
                 end
             end
         end
     else
-        -- If DataService:GetData() fails, send an error notification and proceed to rejoin
         sendNotification("⚠️ Error", "Failed to retrieve game data. Rejoining server.", 3)
-        -- The logic will fall through to the 'else' block below to initiate a rejoin
     end
 
-    updateEggStatusDisplay() -- Update the individual egg status label after the scan is complete
+    updateEggStatusDisplay()
 
-    -- Determine action based on scan results
+    if currentTargetEggName == "None" then
+        targetDisplayLabel.Text = "Target: None"
+        targetDisplayLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+        animateTextColor(targetDisplayLabel, false)
+    else
+        targetDisplayLabel.Text = "Target: " .. currentTargetEggName
+    end
+
     if foundAnyTargetEggInCurrentScan then
-        -- Target found: update status, send success notification, and stop the script
         textLabel.Text = "🔍 Target Eggs: " .. table.concat(_G.TargetNames, ", ") .. "\nStatus 🟢: Target Found: " .. foundEggNameInCurrentScan .. "\nPowered by dyumra"
         sendNotification("✅ System Notification", "Target identified: " .. foundEggNameInCurrentScan .. ". Process complete.", 10, "rbxassetid://6034177218")
-        screenGui:Destroy() -- Clean up the GUI once the task is complete
-        break -- Exit the main while loop, stopping the script
+        
+        for part, highlight in pairs(activeHighlights) do
+            highlight:Destroy()
+        end
+        activeHighlights = {}
+        screenGui:Destroy()
+        break
     else
-        -- No target found: increment attempt counter, prepare kick message, and initiate rejoin
         rejoinAttempts = rejoinAttempts + 1
-        local currentKickMessage = string.format(kickMessageBase, rejoinAttempts) -- Format the kick message with the current attempt number
+        local currentKickMessage = string.format(kickMessageBase, rejoinAttempts)
 
         textLabel.Text = "🚫 Target Eggs: " .. table.concat(_G.TargetNames, ", ") .. "\nStatus: Rejoining Server (Attempt " .. rejoinAttempts .. ")...\nPowered by dyumra"
         sendNotification("⚙️ System Notification", "No designated target eggs detected. Initiating server rejoin sequence. Attempt: " .. rejoinAttempts, 5, "rbxassetid://6034177218")
-        LocalPlayer:Kick(currentKickMessage) -- Kick the player from the current server
+        LocalPlayer:Kick(currentKickMessage)
 
-        task.wait(rejoinDelay) -- Wait for the specified rejoin delay
+        task.wait(rejoinDelay)
 
-        -- Attempt to teleport the player back to the game (usually handled by Kick, but good for robustness)
         local success, err = pcall(function()
             TeleportService:Teleport(game.PlaceId, LocalPlayer)
         end)
         if not success then
             warn("Teleport failed after kick: " .. err)
             sendNotification("⚠️ Error", "Teleport failed after kick. Retrying...", 3)
-            task.wait(5) -- Longer wait if teleport explicitly failed
+            task.wait(5)
         end
     end
 
-    task.wait(1) -- Small delay before the next iteration of the main loop
+    task.wait(1)
 end
