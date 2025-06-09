@@ -1,394 +1,222 @@
--- Global table for target names (assuming this is accessible)
-_G.TargetNames = {
-    "Dragonfly",
-    "Queen Bee",
-    "Red Fox",
-    "Disco Bee"
+-- ★★★ CONFIG ★★★
+local TARGET_NAMES = {
+    ["Dragonfly"] = true,
+    ["Red Fox"] = true,
+    ["Queen Bee"] = true,
+    ["Disco Bee"] = true
 }
 
+local ICONS = {
+    ["Dragonfly"] = "🐉",
+    ["Red Fox"] = "🦊",
+    ["Queen Bee"] = "👑🐝",
+    ["Disco Bee"] = "🌈🐝",
+    Default = "🔍"
+}
+
+local MAX_ROWS = 5
+local SCAN_DELAY = 3
+local MAX_ATTEMPTS = 5
+
+-- SERVICES
 local Players = game:GetService("Players")
-local LocalPlayer = Players.LocalPlayer
-local TweenService = game:GetService("TweenService")
 local TeleportService = game:GetService("TeleportService")
+local RepStore = game:GetService("ReplicatedStorage")
+local StarterGui = game:GetService("StarterGui")
+local DataService = require(RepStore.Modules.DataService)
+local plr = Players.LocalPlayer
 
-local rejoinDelay = 1
-local kickMessageBase = "🌐 System Notification: No designated target eggs were detected in this server. Initiating automatic server relocation. \n 🟢 QN: Server-Finding... attempt(%d) \n ⚙️ NF: Dragonfly: ❌ attempt(%d) \n ⚙️ NF: Queen Bee: ❌ attempt(%d) \n ⚙️ NF: Red Fox: ❌ attempt(%d) \n ⚙️ NF: Disco Bee: ❌ attempt(%d)"
-local maxRejoinAttempts = 5
+-- STATE
+local attempts = 0
+local serverHopEnabled = true
 
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "EggHunterGUI"
-screenGui.ResetOnSpawn = false
-screenGui.Parent = game.CoreGui
+-- UI SETUP
+local gui = Instance.new("ScreenGui", plr:WaitForChild("PlayerGui"))
+gui.Name = "PetScannerUI"; gui.ResetOnSpawn = false
 
-local textLabel = Instance.new("TextLabel")
-textLabel.Name = "StatusLabel"
-textLabel.Size = UDim2.new(0, 250, 0, 100)
-textLabel.Position = UDim2.new(0.01, 0, 0.05, 0)
-textLabel.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-textLabel.BackgroundTransparency = 0.7
-textLabel.TextColor3 = Color3.fromRGB(240, 240, 240)
-textLabel.Font = Enum.Font.SourceSansBold
-textLabel.TextSize = 18
-textLabel.TextWrapped = true
-textLabel.TextXAlignment = Enum.TextXAlignment.Left
-textLabel.TextYAlignment = Enum.TextYAlignment.Top
-textLabel.Text = "🔍 List Target ( 🐉 ) Dragonfly: , ( 🐝👑 ) Queen Bee: , ( 🦊 ) Red Fox: , ( 🐝🪩 ) Disco Bee:\nStatus: Initializing\nPowered by dyumra"
-textLabel.BorderSizePixel = 0
-textLabel.ClipsDescendants = true
-textLabel.Parent = screenGui
-
-local corner = Instance.new("UICorner")
-corner.CornerRadius = UDim.new(0, 10)
-corner.Parent = textLabel
-
-local eggStatusLabel = Instance.new("TextLabel")
-eggStatusLabel.Name = "EggStatusLabel"
-eggStatusLabel.Size = UDim2.new(0, 200, 0, 100)
-eggStatusLabel.Position = UDim2.new(1, -210, 0.05, 0)
-eggStatusLabel.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-eggStatusLabel.BackgroundTransparency = 0.7
-eggStatusLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-eggStatusLabel.Font = Enum.Font.SourceSansBold
-eggStatusLabel.TextSize = 16
-eggStatusLabel.TextWrapped = true
-eggStatusLabel.TextXAlignment = Enum.TextXAlignment.Left
-eggStatusLabel.TextYAlignment = Enum.TextYAlignment.Top
-eggStatusLabel.BorderSizePixel = 0
-eggStatusLabel.ClipsDescendants = true
-eggStatusLabel.Parent = screenGui
-
-local eggStatusCorner = Instance.new("UICorner")
-eggStatusCorner.CornerRadius = UDim.new(0, 10)
-eggStatusCorner.Parent = eggStatusLabel
-
-local targetDisplayLabel = Instance.new("TextLabel")
-targetDisplayLabel.Name = "TargetDisplayLabel"
-targetDisplayLabel.Size = UDim2.new(0, 300, 0, 50)
-targetDisplayLabel.Position = UDim2.new(0.01, 0, 1, -60)
-targetDisplayLabel.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-targetDisplayLabel.BackgroundTransparency = 0.7
-targetDisplayLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-targetDisplayLabel.Font = Enum.Font.SourceSansBold
-targetDisplayLabel.TextSize = 24
-targetDisplayLabel.TextWrapped = true
-targetDisplayLabel.TextXAlignment = Enum.TextXAlignment.Center
-targetDisplayLabel.TextYAlignment = Enum.TextYAlignment.Center
-targetDisplayLabel.BorderSizePixel = 0
-targetDisplayLabel.ClipsDescendants = true
-targetDisplayLabel.Parent = screenGui
-
-local targetDisplayCorner = Instance.new("UICorner")
-targetDisplayCorner.CornerRadius = UDim.new(0, 10)
-targetDisplayCorner.Parent = targetDisplayLabel
-
-local eggFoundStatus = {}
-for _, targetName in ipairs(_G.TargetNames) do
-    eggFoundStatus[targetName] = "❌"
+local function roundCorner(inst, radius)
+    local cr = Instance.new("UICorner", inst)
+    cr.CornerRadius = UDim.new(0, radius)
 end
 
-local highlightColors = {
-    ["Bug Egg"] = Color3.fromRGB(0, 255, 0),
-    ["Anti Bee Egg"] = Color3.fromRGB(255, 0, 0),
-    ["Bee Egg"] = Color3.fromRGB(255, 165, 0)
-}
+-- ListMain Frame
+local listF = Instance.new("Frame", gui)
+listF.Size = UDim2.new(0, 360, 0, 220)
+listF.Position = UDim2.new(0,10,0,10)
+listF.BackgroundColor3 = Color3.new(0,0,0)
+listF.BackgroundTransparency = 0.7
+roundCorner(listF, 12)
 
-local activeHighlights = {}
+local listMain = Instance.new("TextLabel", listF)
+listMain.Size = UDim2.new(1, -10, 0.5, -10)
+listMain.Position = UDim2.new(0,5,0,5)
+listMain.TextWrapped = true
+listMain.RichText = true
+listMain.TextXAlignment = Enum.TextXAlignment.Left
+listMain.TextYAlignment = Enum.TextYAlignment.Top
+listMain.Font = Enum.Font.SourceSansBold
+listMain.TextSize = 18
+listMain.BackgroundTransparency = 1
+listMain.Text = ""
+listMain.ClipsDescendants = true
 
-local function updateEggStatusDisplay()
-    local statusText = ""
-    for _, targetName in ipairs(_G.TargetNames) do
-        local emoji = ""
-        if targetName == "Dragonfly" then
-            emoji = "🐉"
-        elseif targetName == "Queen Bee" then
-            emoji = "🐝👑"
-        elseif targetName == "Red Fox" then
-            emoji = "🦊"
-        elseif targetName == "Disco Bee" then
-            emoji = "🐝🪩"
+-- List Check Frame
+local checkF = Instance.new("Frame", gui)
+checkF.Size = UDim2.new(0, 360, 0, 170)
+checkF.Position = UDim2.new(0,10,0,240)
+checkF.BackgroundColor3 = Color3.new(0,0,0)
+checkF.BackgroundTransparency = 0.7
+roundCorner(checkF, 12)
+
+local checkMain = Instance.new("TextLabel", checkF)
+checkMain.Size = UDim2.new(1,-10,1,-10)
+checkMain.Position = UDim2.new(0,5,0,5)
+checkMain.TextWrapped = true
+checkMain.RichText = true
+checkMain.TextXAlignment = Enum.TextXAlignment.Left
+checkMain.TextYAlignment = Enum.TextYAlignment.Top
+checkMain.Font = Enum.Font.SourceSansBold
+checkMain.TextSize = 18
+checkMain.BackgroundTransparency = 1
+
+-- LogMenu Frame
+local logF = Instance.new("Frame", gui)
+logF.Size = UDim2.new(0, 360, 0, 160)
+logF.Position = UDim2.new(0,10,0,430)
+logF.BackgroundColor3 = Color3.new(0,0,0)
+logF.BackgroundTransparency = 0.7
+roundCorner(logF, 12)
+
+local logLabel = Instance.new("TextLabel", logF)
+logLabel.Size = UDim2.new(1,-10,1,-50)
+logLabel.Position = UDim2.new(0,5,0,5)
+logLabel.TextWrapped = true
+logLabel.RichText = true
+logLabel.TextXAlignment = Enum.TextXAlignment.Left
+logLabel.TextYAlignment = Enum.TextYAlignment.Top
+logLabel.Font = Enum.Font.SourceSansBold
+logLabel.TextSize = 18
+logLabel.BackgroundTransparency = 1
+
+-- Buttons
+local btnFrame = Instance.new("Frame", logF)
+btnFrame.Size = UDim2.new(1,-10,0,40)
+btnFrame.Position = UDim2.new(0,5,1,-45)
+btnFrame.BackgroundTransparency = 1
+
+local toggleBtn = Instance.new("TextButton", btnFrame)
+toggleBtn.Size = UDim2.new(0.48,0,1,0)
+toggleBtn.Position = UDim2.new(0,0,0,0)
+toggleBtn.Text = "Disable Server‑Hop"
+toggleBtn.Font = Enum.Font.SourceSansBold
+toggleBtn.TextSize = 18
+toggleBtn.TextColor3 = Color3.new(1,1,1)
+toggleBtn.BackgroundColor3 = Color3.new(0,0,0)
+toggleBtn.BackgroundTransparency = 0.7
+roundCorner(toggleBtn, 10)
+
+local devBtn = Instance.new("TextButton", btnFrame)
+devBtn.Size = UDim2.new(0.48,0,1,0)
+devBtn.Position = UDim2.new(0.52,0,0,0)
+devBtn.Text = "Powered by @dyumra."
+devBtn.Font = Enum.Font.SourceSansBold
+devBtn.TextSize = 18
+devBtn.TextColor3 = Color3.new(1,1,1)
+devBtn.BackgroundColor3 = Color3.new(0,0,0)
+devBtn.BackgroundTransparency = 0.7
+roundCorner(devBtn, 10)
+
+-- NOTIFY
+local function showNotify(text)
+    StarterGui:SetCore("SendNotification",{
+        Title = "System Notification | @dyumra",
+        Text = text, Duration = 3
+    })
+end
+
+-- DATA HANDLERS
+local function hasEgg(name)
+    for _, o in pairs(DataService:GetData().SavedObjects) do
+        if o.ObjectType=="PetEgg" and o.Data.RandomPetData and o.Data.CanHatch and o.Data.RandomPetData.Name==name then
+            return true
         end
-        statusText = statusText .. emoji .. " " .. targetName .. ": " .. eggFoundStatus[targetName] .. "\n"
     end
-    eggStatusLabel.Text = statusText
+    return false
 end
 
-updateEggStatusDisplay()
+local function getFoundList()
+    local t, seen = {}, {}
+    for _, o in pairs(DataService:GetData().SavedObjects) do
+        if o.ObjectType=="PetEgg" and o.Data.RandomPetData and o.Data.CanHatch then
+            local n = o.Data.RandomPetData.Name
+            if not seen[n] then
+                seen[n] = true
+                table.insert(t, n)
+                if #t >= MAX_ROWS then break
+            end
+        end
+    end
+    return t
+end
 
-local function animateTextColor(labelToAnimate, isRainbow)
-    local colors = {
-        Color3.fromRGB(255, 0, 0),
-        Color3.fromRGB(255, 255, 0),
-        Color3.fromRGB(0, 255, 0),
-        Color3.fromRGB(0, 255, 255),
-        Color3.fromRGB(0, 0, 255),
-        Color3.fromRGB(255, 0, 255)
-    }
-    local tweenInfo = TweenInfo.new(
-        2,
-        Enum.EasingStyle.Linear,
-        Enum.EasingDirection.Out
+local function refreshUI()
+    -- ListMain (rainbow color)
+    local ltxt = ""
+    for _, n in ipairs(TARGET_NAMES) do
+        local icon = ICONS[n] or ICONS.Default
+        local mark = hasEgg(n) and "✅" or "❌"
+        ltxt ..= string.format("<font color=\"rgb(%d,%d,%d)\">(%s) %s: %s</font>\n",
+            tick()%2*127+128,  -- dynamic rainbow
+            tick()%3*85+85,
+            tick()%5*51+51,
+            icon, n, mark)
+    end
+    listMain.Text = ltxt
+
+    -- CheckList (white)
+    local fnd = getFoundList()
+    local cl = ""
+    for i=1,MAX_ROWS do
+        local name = fnd[i] or "N/A"
+        local icon = ICONS.Default
+        local mark = name=="N/A" and "❌" or "✅"
+        cl ..= string.format("%d.(%s) %s: %s\n", i, icon, name, mark)
+    end
+    checkMain.Text = cl
+
+    -- LogMenu
+    local targets = table.concat(fnd, ", ")
+    logLabel.Text = string.format(
+        "⚙️ Log:\n🎯 Target: %s\n🛡️ Target Scan: %s attempted(s)\n🌐 N/A\n🔗 Dev: https://github.com/dyumra/",
+        (targets ~= "" and targets) or "N/A", attempts
     )
-
-    task.spawn(function()
-        while task.wait() do
-            if isRainbow and labelToAnimate.Parent then
-                for i = 1, #colors do
-                    local nextColorIndex = (i % #colors) + 1
-                    local goal = { TextColor3 = colors[nextColorIndex] }
-                    local tween = TweenService:Create(labelToAnimate, tweenInfo, goal)
-                    tween:Play()
-                    tween.Completed:Wait()
-                end
-            else
-                break
-            end
-        end
-    end)
 end
 
-animateTextColor(eggStatusLabel, true)
-
-local function sendNotification(title, text, duration, icon)
-    print("Notification: " .. title .. " - " .. text)
-end
-
-local function setHighlight(part, color)
-    if activeHighlights[part] then
-        activeHighlights[part]:Destroy()
-        activeHighlights[part] = nil
-    end
-
-    if part and color then
-        local highlight = Instance.new("Highlight")
-        highlight.FillColor = color
-        highlight.OutlineColor = color
-        highlight.Parent = part
-        activeHighlights[part] = highlight
-    end
-end
-
-local confirmationFrame = Instance.new("Frame")
-confirmationFrame.Name = "ServerHopConfirmation"
-confirmationFrame.Size = UDim2.new(0, 300, 0, 150)
-confirmationFrame.Position = UDim2.new(0.5, -150, 0.5, -75)
-confirmationFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-confirmationFrame.BackgroundTransparency = 0.1
-confirmationFrame.BorderSizePixel = 0
-confirmationFrame.Visible = false
-confirmationFrame.Parent = screenGui
-
-local confirmationCorner = Instance.new("UICorner")
-confirmationCorner.CornerRadius = UDim.new(0, 10)
-confirmationCorner.Parent = confirmationFrame
-
-local confirmationText = Instance.new("TextLabel")
-confirmationText.Name = "ConfirmationText"
-confirmationText.Size = UDim2.new(1, 0, 0.6, 0)
-confirmationText.Position = UDim2.new(0, 0, 0, 0)
-confirmationText.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-confirmationText.BackgroundTransparency = 1
-confirmationText.TextColor3 = Color3.fromRGB(255, 255, 255)
-confirmationText.Font = Enum.Font.SourceSansBold
-confirmationText.TextSize = 20
-confirmationText.TextWrapped = true
-confirmationText.TextXAlignment = Enum.TextXAlignment.Center
-confirmationText.TextYAlignment = Enum.TextYAlignment.Center
-confirmationText.Text = "No target eggs found after 5 attempts.\nDo you want to Server-Hop?"
-confirmationText.Parent = confirmationFrame
-
-local yesButton = Instance.new("TextButton")
-yesButton.Name = "YesButton"
-yesButton.Size = UDim2.new(0.4, 0, 0.3, 0)
-yesButton.Position = UDim2.new(0.05, 0, 0.65, 0)
-yesButton.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
-yesButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-yesButton.Font = Enum.Font.SourceSansBold
-yesButton.TextSize = 20
-yesButton.Text = "Yes"
-yesButton.BorderSizePixel = 0
-yesButton.Parent = confirmationFrame
-
-local yesButtonCorner = Instance.new("UICorner")
-yesButtonCorner.CornerRadius = UDim.new(0, 5)
-yesButtonCorner.Parent = yesButton
-
-local noButton = Instance.new("TextButton")
-noButton.Name = "NoButton"
-noButton.Size = UDim2.new(0.4, 0, 0.3, 0)
-noButton.Position = UDim2.new(0.55, 0, 0.65, 0)
-noButton.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
-noButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-noButton.Font = Enum.Font.SourceSansBold
-noButton.TextSize = 20
-noButton.Text = "No"
-noButton.BorderSizePixel = 0
-noButton.Parent = confirmationFrame
-
-local noButtonCorner = Instance.new("UICorner")
-noButtonCorner.CornerRadius = UDim.new(0, 5)
-noButtonCorner.Parent = noButton
-
-local rejoinAttempts = 0
-local serverHopConfirmed = false
-
-local function showConfirmationPrompt()
-    confirmationFrame.Visible = true
-    local originalText = textLabel.Text
-    textLabel.Text = "Waiting for Server-Hop confirmation..."
-
-    serverHopConfirmed = false
-    local promptResponse = nil
-
-    local function onYesClicked()
-        promptResponse = true
-        confirmationFrame.Visible = false
-    end
-
-    local function onNoClicked()
-        promptResponse = false
-        confirmationFrame.Visible = false
-    end
-
-    yesButton.MouseButton1Click:Connect(onYesClicked)
-    noButton.MouseButton1Click:Connect(onNoClicked)
-
-    repeat task.wait() until promptResponse ~= nil
-
-    textLabel.Text = originalText
-    return promptResponse
-end
-
-while task.wait(1) do
-    local foundAnyTargetEggInCurrentScan = false
-    local foundEggNameInCurrentScan = ""
-    local currentTargetEggName = "None"
-
-    for part, highlight in pairs(activeHighlights) do
-        highlight:Destroy()
-    end
-    activeHighlights = {}
-
-    for k in pairs(eggFoundStatus) do
-        eggFoundStatus[k] = "❌"
-    end
-
-    textLabel.Text = "🔍 List Target ( 🐉 ) Dragonfly: , ( 🐝👑 ) Queen Bee: , ( 🦊 ) Red Fox: , ( 🐝🪩 ) Disco Bee:\nStatus: Scanning Server...\nPowered by dyumra"
-    sendNotification("⚙️ System Notification", "Commencing server scan for target eggs.", 3)
-
-    local potentialEggContainers = {game.Workspace} 
-    
-    local foundEggsInWorkspace = {}
-    for _, container in ipairs(potentialEggContainers) do
-        for _, obj in ipairs(container:GetDescendants()) do
-            if obj:IsA("Model") and obj.Name:find("Egg") then
-                local eggDisplayName = nil
-                if obj:FindFirstChild("DisplayName") and obj.DisplayName:IsA("StringValue") then
-                    eggDisplayName = obj.DisplayName.Value
-                elseif obj.Name then
-                    eggDisplayName = obj.Name 
-                end
-
-                if eggDisplayName then
-                    for _, targetName in ipairs(_G.TargetNames) do
-                        if eggDisplayName:find(targetName) then
-                            table.insert(foundEggsInWorkspace, {Model = obj, DisplayName = eggDisplayName, RawName = obj.Name})
-                            break
-                        end
-                    end
-                end
-            end
+-- SCAN LOOP
+spawn(function()
+    while true do
+        wait(SCAN_DELAY)
+        attempts += 1
+        if serverHopEnabled and attempts >= MAX_ATTEMPTS then
+            showNotify("No target eggs found after "..attempts.." attempts.")
+            TeleportService:Teleport(game.PlaceId, plr)
+            return
         end
+        refreshUI()
     end
+end)
 
-    if #foundEggsInWorkspace > 0 then
-        for _, eggData in ipairs(foundEggsInWorkspace) do
-            local eggDisplayName = eggData.DisplayName
-            local eggModel = eggData.Model
-            local eggRawName = eggData.RawName
+-- BUTTON EVENTS
+toggleBtn.MouseButton1Click:Connect(function()
+    serverHopEnabled = not serverHopEnabled
+    toggleBtn.Text = serverHopEnabled and "Disable Server‑Hop" or "Enable Server‑Hop"
+    showNotify("Server‑Hop is now "..(serverHopEnabled and "ENABLED" or "DISABLED"))
+end)
 
-            for _, targetName in ipairs(_G.TargetNames) do
-                if eggDisplayName:find(targetName) then
-                    foundAnyTargetEggInCurrentScan = true
-                    foundEggNameInCurrentScan = targetName
-                    eggFoundStatus[targetName] = "✅"
+devBtn.MouseButton1Click:Connect(function()
+    setclipboard("https://github.com/dyumra/")
+    showNotify("GitHub link copied!")
+end)
 
-                    local highlightColor = highlightColors[eggRawName] or Color3.fromRGB(0, 255, 255)
-                    if highlightColor then
-                        setHighlight(eggModel, highlightColor)
-                    end
-
-                    if targetName == "Queen Bee" then
-                        currentTargetEggName = "Queen Bee"
-                        targetDisplayLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-                        animateTextColor(targetDisplayLabel, true)
-                    elseif targetName == "Disco Bee" then 
-                        currentTargetEggName = "Disco Bee"
-                        targetDisplayLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-                        animateTextColor(targetDisplayLabel, true)
-                    end
-                end
-            end
-        end
-    else
-        sendNotification("⚠️ Info", "No eggs found in accessible game objects.", 3)
-    end
-
-    updateEggStatusDisplay()
-
-    if currentTargetEggName == "None" then
-        targetDisplayLabel.Text = "Target: None"
-        targetDisplayLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-        animateTextColor(targetDisplayLabel, false)
-    else
-        targetDisplayLabel.Text = "Target: " .. currentTargetEggName
-    end
-
-    if foundAnyTargetEggInCurrentScan then
-        textLabel.Text = "🔍 List Target ( 🐉 ) Dragonfly: , ( 🐝👑 ) Queen Bee: , ( 🦊 ) Red Fox: , ( 🐝🪩 ) Disco Bee:\nStatus 🟢: Target Found: " .. foundEggNameInCurrentScan .. "\nPowered by dyumra"
-        sendNotification("✅ System Notification", "Target identified: " .. foundEggNameInCurrentScan .. ". Process complete.", 10)
-        
-        for part, highlight in pairs(activeHighlights) do
-            highlight:Destroy()
-        end
-        activeHighlights = {}
-        screenGui:Destroy()
-        break
-    else
-        rejoinAttempts = rejoinAttempts + 1
-        local currentKickMessage = string.format(kickMessageBase, rejoinAttempts, rejoinAttempts, rejoinAttempts, rejoinAttempts, rejoinAttempts)
-
-        textLabel.Text = "🚫 List Target ( 🐉 ) Dragonfly: , ( 🐝👑 ) Queen Bee: , ( 🦊 ) Red Fox: , ( 🐝🪩 ) Disco Bee:\nStatus: No targets. Scan again (Attempt " .. rejoinAttempts .. ")...\nPowered by dyumra"
-        sendNotification("⚙️ System Notification", "No designated target eggs detected. Scanning again. Attempt: " .. rejoinAttempts, 5)
-        
-        if rejoinAttempts >= maxRejoinAttempts then
-            sendNotification("🌐 System Notification", "Max scan attempts reached. Prompting for Server-Hop.", 5)
-            local shouldServerHop = showConfirmationPrompt()
-
-            if shouldServerHop then
-                if LocalPlayer then
-                    print("User confirmed Server-Hop. Initiating teleport.")
-                    if pcall(function() TeleportService:Teleport(game.PlaceId, LocalPlayer) end) then
-                         print("Teleport initiated successfully.")
-                    else
-                        print("Teleport failed or is not supported by the current executor environment.")
-                    end
-                    
-                    for part, highlight in pairs(activeHighlights) do
-                        highlight:Destroy()
-                    end
-                    activeHighlights = {}
-                    screenGui:Destroy()
-                    break
-                else
-                    print("LocalPlayer not found, cannot initiate teleport.")
-                end
-            else
-                print("User chose NOT to Server-Hop. Resetting attempts and continuing scan.")
-                rejoinAttempts = 0
-                task.wait(rejoinDelay)
-            end
-        else
-            task.wait(rejoinDelay)
-        end
-    end
-end
+-- INIT
+refreshUI()
