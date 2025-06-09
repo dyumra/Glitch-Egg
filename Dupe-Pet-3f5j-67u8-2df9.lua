@@ -1,3 +1,4 @@
+-- Global table for target names (assuming this is accessible)
 _G.TargetNames = {
     "Dragonfly",
     "Queen Bee",
@@ -5,20 +6,19 @@ _G.TargetNames = {
     "Disco Bee"
 }
 
-local DataSer = require(game:GetService("ReplicatedStorage").Modules.DataService)
-local TeleportService = game:GetService("TeleportService")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
-local StarterGui = game:GetService("StarterGui")
 local TweenService = game:GetService("TweenService")
-local Lighting = game:GetService("Lighting")
+local TeleportService = game:GetService("TeleportService")
 
 local rejoinDelay = 1
 local kickMessageBase = "🌐 System Notification: No designated target eggs were detected in this server. Initiating automatic server relocation. \n 🟢 QN: Server-Finding... attempt(%d) \n ⚙️ NF: Dragonfly: ❌ attempt(%d) \n ⚙️ NF: Queen Bee: ❌ attempt(%d) \n ⚙️ NF: Red Fox: ❌ attempt(%d) \n ⚙️ NF: Disco Bee: ❌ attempt(%d)"
+local maxRejoinAttempts = 5
 
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "EggHunterGUI"
 screenGui.ResetOnSpawn = false
+screenGui.Parent = game.CoreGui
 
 local textLabel = Instance.new("TextLabel")
 textLabel.Name = "StatusLabel"
@@ -32,7 +32,7 @@ textLabel.TextSize = 18
 textLabel.TextWrapped = true
 textLabel.TextXAlignment = Enum.TextXAlignment.Left
 textLabel.TextYAlignment = Enum.TextYAlignment.Top
-textLabel.Text = "🔍 Target Eggs: " .. table.concat(_G.TargetNames, ", ") .. "\nStatus: Initializing\nPowered by dyumra"
+textLabel.Text = "🔍 List Target ( 🐉 ) Dragonfly: , ( 🐝👑 ) Queen Bee: , ( 🦊 ) Red Fox: , ( 🐝🪩 ) Disco Bee:\nStatus: Initializing\nPowered by dyumra"
 textLabel.BorderSizePixel = 0
 textLabel.ClipsDescendants = true
 textLabel.Parent = screenGui
@@ -64,7 +64,7 @@ eggStatusCorner.Parent = eggStatusLabel
 local targetDisplayLabel = Instance.new("TextLabel")
 targetDisplayLabel.Name = "TargetDisplayLabel"
 targetDisplayLabel.Size = UDim2.new(0, 300, 0, 50)
-targetDisplayLabel.Position = UDim2.new(0.01, 0, 0.95, -50)
+targetDisplayLabel.Position = UDim2.new(0.01, 0, 1, -60)
 targetDisplayLabel.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 targetDisplayLabel.BackgroundTransparency = 0.7
 targetDisplayLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -81,17 +81,15 @@ local targetDisplayCorner = Instance.new("UICorner")
 targetDisplayCorner.CornerRadius = UDim.new(0, 10)
 targetDisplayCorner.Parent = targetDisplayLabel
 
-screenGui.Parent = StarterGui
-
 local eggFoundStatus = {}
 for _, targetName in ipairs(_G.TargetNames) do
     eggFoundStatus[targetName] = "❌"
 end
 
 local highlightColors = {
-    ["Bug Egg"] = Color3.fromRGB(0, 255, 0),    -- Green for Bug Egg (Dragonfly)
-    ["Anti Bee Egg"] = Color3.fromRGB(255, 0, 0), -- Red for Anti Bee Egg (Disco Bee)
-    ["Bee Egg"] = Color3.fromRGB(255, 165, 0)   -- Orange for Bee Egg (Queen Bee)
+    ["Bug Egg"] = Color3.fromRGB(0, 255, 0),
+    ["Anti Bee Egg"] = Color3.fromRGB(255, 0, 0),
+    ["Bee Egg"] = Color3.fromRGB(255, 165, 0)
 }
 
 local activeHighlights = {}
@@ -99,7 +97,17 @@ local activeHighlights = {}
 local function updateEggStatusDisplay()
     local statusText = ""
     for _, targetName in ipairs(_G.TargetNames) do
-        statusText = statusText .. targetName .. ": " .. eggFoundStatus[targetName] .. "\n"
+        local emoji = ""
+        if targetName == "Dragonfly" then
+            emoji = "🐉"
+        elseif targetName == "Queen Bee" then
+            emoji = "🐝👑"
+        elseif targetName == "Red Fox" then
+            emoji = "🦊"
+        elseif targetName == "Disco Bee" then
+            emoji = "🐝🪩"
+        end
+        statusText = statusText .. emoji .. " " .. targetName .. ": " .. eggFoundStatus[targetName] .. "\n"
     end
     eggStatusLabel.Text = statusText
 end
@@ -141,13 +149,8 @@ end
 animateTextColor(eggStatusLabel, true)
 
 local function sendNotification(title, text, duration, icon)
-    StarterGui:SetCore("SendNotification", {
-        Title = title,
-        Text = text,
-        Duration = duration or 5,
-        Icon = icon or ""
-    })
-}
+    print("Notification: " .. title .. " - " .. text)
+end
 
 local function setHighlight(part, color)
     if activeHighlights[part] then
@@ -162,11 +165,100 @@ local function setHighlight(part, color)
         highlight.Parent = part
         activeHighlights[part] = highlight
     end
-}
+end
+
+local confirmationFrame = Instance.new("Frame")
+confirmationFrame.Name = "ServerHopConfirmation"
+confirmationFrame.Size = UDim2.new(0, 300, 0, 150)
+confirmationFrame.Position = UDim2.new(0.5, -150, 0.5, -75)
+confirmationFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+confirmationFrame.BackgroundTransparency = 0.1
+confirmationFrame.BorderSizePixel = 0
+confirmationFrame.Visible = false
+confirmationFrame.Parent = screenGui
+
+local confirmationCorner = Instance.new("UICorner")
+confirmationCorner.CornerRadius = UDim.new(0, 10)
+confirmationCorner.Parent = confirmationFrame
+
+local confirmationText = Instance.new("TextLabel")
+confirmationText.Name = "ConfirmationText"
+confirmationText.Size = UDim2.new(1, 0, 0.6, 0)
+confirmationText.Position = UDim2.new(0, 0, 0, 0)
+confirmationText.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+confirmationText.BackgroundTransparency = 1
+confirmationText.TextColor3 = Color3.fromRGB(255, 255, 255)
+confirmationText.Font = Enum.Font.SourceSansBold
+confirmationText.TextSize = 20
+confirmationText.TextWrapped = true
+confirmationText.TextXAlignment = Enum.TextXAlignment.Center
+confirmationText.TextYAlignment = Enum.TextYAlignment.Center
+confirmationText.Text = "No target eggs found after 5 attempts.\nDo you want to Server-Hop?"
+confirmationText.Parent = confirmationFrame
+
+local yesButton = Instance.new("TextButton")
+yesButton.Name = "YesButton"
+yesButton.Size = UDim2.new(0.4, 0, 0.3, 0)
+yesButton.Position = UDim2.new(0.05, 0, 0.65, 0)
+yesButton.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
+yesButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+yesButton.Font = Enum.Font.SourceSansBold
+yesButton.TextSize = 20
+yesButton.Text = "Yes"
+yesButton.BorderSizePixel = 0
+yesButton.Parent = confirmationFrame
+
+local yesButtonCorner = Instance.new("UICorner")
+yesButtonCorner.CornerRadius = UDim.new(0, 5)
+yesButtonCorner.Parent = yesButton
+
+local noButton = Instance.new("TextButton")
+noButton.Name = "NoButton"
+noButton.Size = UDim2.new(0.4, 0, 0.3, 0)
+noButton.Position = UDim2.new(0.55, 0, 0.65, 0)
+noButton.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
+noButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+noButton.Font = Enum.Font.SourceSansBold
+noButton.TextSize = 20
+noButton.Text = "No"
+noButton.BorderSizePixel = 0
+noButton.Parent = confirmationFrame
+
+local noButtonCorner = Instance.new("UICorner")
+noButtonCorner.CornerRadius = UDim.new(0, 5)
+noButtonCorner.Parent = noButton
 
 local rejoinAttempts = 0
+local serverHopConfirmed = false
 
-while true do
+local function showConfirmationPrompt()
+    confirmationFrame.Visible = true
+    local originalText = textLabel.Text
+    textLabel.Text = "Waiting for Server-Hop confirmation..."
+
+    serverHopConfirmed = false
+    local promptResponse = nil
+
+    local function onYesClicked()
+        promptResponse = true
+        confirmationFrame.Visible = false
+    end
+
+    local function onNoClicked()
+        promptResponse = false
+        confirmationFrame.Visible = false
+    end
+
+    yesButton.MouseButton1Click:Connect(onYesClicked)
+    noButton.MouseButton1Click:Connect(onNoClicked)
+
+    repeat task.wait() until promptResponse ~= nil
+
+    textLabel.Text = originalText
+    return promptResponse
+end
+
+while task.wait(1) do
     local foundAnyTargetEggInCurrentScan = false
     local foundEggNameInCurrentScan = ""
     local currentTargetEggName = "None"
@@ -180,43 +272,65 @@ while true do
         eggFoundStatus[k] = "❌"
     end
 
-    textLabel.Text = "Target Eggs: " .. table.concat(_G.TargetNames, ", ") .. "\nStatus: Scanning Server...\nPowered by dyumra"
-    sendNotification("⚙️ System Notification", "Commencing server scan for target eggs.", 3, "rbxassetid://6034177218")
+    textLabel.Text = "🔍 List Target ( 🐉 ) Dragonfly: , ( 🐝👑 ) Queen Bee: , ( 🦊 ) Red Fox: , ( 🐝🪩 ) Disco Bee:\nStatus: Scanning Server...\nPowered by dyumra"
+    sendNotification("⚙️ System Notification", "Commencing server scan for target eggs.", 3)
 
-    local data = DataSer:GetData()
-    if data and data.SavedObjects then
-        for _, obj in pairs(data.SavedObjects) do
-            if obj.ObjectType == "PetEgg" then
-                if obj.Data.RandomPetData ~= nil and obj.Data.CanHatch then
-                    local eggDisplayName = obj.Data.RandomPetData.DisplayName or obj.Data.RandomPetData.Name
+    local potentialEggContainers = {game.Workspace} 
+    
+    local foundEggsInWorkspace = {}
+    for _, container in ipairs(potentialEggContainers) do
+        for _, obj in ipairs(container:GetDescendants()) do
+            if obj:IsA("Model") and obj.Name:find("Egg") then
+                local eggDisplayName = nil
+                if obj:FindFirstChild("DisplayName") and obj.DisplayName:IsA("StringValue") then
+                    eggDisplayName = obj.DisplayName.Value
+                elseif obj.Name then
+                    eggDisplayName = obj.Name 
+                end
 
+                if eggDisplayName then
                     for _, targetName in ipairs(_G.TargetNames) do
-                        if eggDisplayName == targetName then
-                            foundAnyTargetEggInCurrentScan = true
-                            foundEggNameInCurrentScan = targetName
-                            eggFoundStatus[targetName] = "✅"
-
-                            local highlightColor = highlightColors[obj.Data.RandomPetData.Name]
-                            if highlightColor then
-                                setHighlight(obj.Model, highlightColor)
-                            end
-
-                            if targetName == "Queen Bee" then
-                                currentTargetEggName = "Queen Bee"
-                                targetDisplayLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-                                animateTextColor(targetDisplayLabel, true)
-                            elseif targetName == "Disco Bee" then -- Handle Disco Bee for highlighting if its part name is unique
-                                currentTargetEggName = "Disco Bee"
-                                targetDisplayLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-                                animateTextColor(targetDisplayLabel, true)
-                            end
+                        if eggDisplayName:find(targetName) then
+                            table.insert(foundEggsInWorkspace, {Model = obj, DisplayName = eggDisplayName, RawName = obj.Name})
+                            break
                         end
                     end
                 end
             end
         end
+    end
+
+    if #foundEggsInWorkspace > 0 then
+        for _, eggData in ipairs(foundEggsInWorkspace) do
+            local eggDisplayName = eggData.DisplayName
+            local eggModel = eggData.Model
+            local eggRawName = eggData.RawName
+
+            for _, targetName in ipairs(_G.TargetNames) do
+                if eggDisplayName:find(targetName) then
+                    foundAnyTargetEggInCurrentScan = true
+                    foundEggNameInCurrentScan = targetName
+                    eggFoundStatus[targetName] = "✅"
+
+                    local highlightColor = highlightColors[eggRawName] or Color3.fromRGB(0, 255, 255)
+                    if highlightColor then
+                        setHighlight(eggModel, highlightColor)
+                    end
+
+                    if targetName == "Queen Bee" then
+                        currentTargetEggName = "Queen Bee"
+                        targetDisplayLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+                        animateTextColor(targetDisplayLabel, true)
+                    elseif targetName == "Disco Bee" then 
+                        currentTargetEggName = "Disco Bee"
+                        targetDisplayLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+                        animateTextColor(targetDisplayLabel, true)
+                    end
+                end
+            end
+        end
     else
-        sendNotification("⚠️ Error", "Failed to retrieve game data. Rejoining server.", 3)
+        sendNotification("⚠️ Info", "No eggs found in accessible game objects.", 3)
     end
 
     updateEggStatusDisplay()
@@ -230,8 +344,8 @@ while true do
     end
 
     if foundAnyTargetEggInCurrentScan then
-        textLabel.Text = "🔍 Target Eggs: " .. table.concat(_G.TargetNames, ", ") .. "\nStatus 🟢: Target Found: " .. foundEggNameInCurrentScan .. "\nPowered by dyumra"
-        sendNotification("✅ System Notification", "Target identified: " .. foundEggNameInCurrentScan .. ". Process complete.", 10, "rbxassetid://6034177218")
+        textLabel.Text = "🔍 List Target ( 🐉 ) Dragonfly: , ( 🐝👑 ) Queen Bee: , ( 🦊 ) Red Fox: , ( 🐝🪩 ) Disco Bee:\nStatus 🟢: Target Found: " .. foundEggNameInCurrentScan .. "\nPowered by dyumra"
+        sendNotification("✅ System Notification", "Target identified: " .. foundEggNameInCurrentScan .. ". Process complete.", 10)
         
         for part, highlight in pairs(activeHighlights) do
             highlight:Destroy()
@@ -241,23 +355,40 @@ while true do
         break
     else
         rejoinAttempts = rejoinAttempts + 1
-        local currentKickMessage = string.format(kickMessageBase, rejoinAttempts)
+        local currentKickMessage = string.format(kickMessageBase, rejoinAttempts, rejoinAttempts, rejoinAttempts, rejoinAttempts, rejoinAttempts)
 
-        textLabel.Text = "🚫 Target Eggs: " .. table.concat(_G.TargetNames, ", ") .. "\nStatus: Rejoining Server (Attempt " .. rejoinAttempts .. ")...\nPowered by dyumra"
-        sendNotification("⚙️ System Notification", "No designated target eggs detected. Initiating server rejoin sequence. Attempt: " .. rejoinAttempts, 5, "rbxassetid://6034177218")
-        LocalPlayer:Kick(currentKickMessage)
+        textLabel.Text = "🚫 List Target ( 🐉 ) Dragonfly: , ( 🐝👑 ) Queen Bee: , ( 🦊 ) Red Fox: , ( 🐝🪩 ) Disco Bee:\nStatus: No targets. Scan again (Attempt " .. rejoinAttempts .. ")...\nPowered by dyumra"
+        sendNotification("⚙️ System Notification", "No designated target eggs detected. Scanning again. Attempt: " .. rejoinAttempts, 5)
+        
+        if rejoinAttempts >= maxRejoinAttempts then
+            sendNotification("🌐 System Notification", "Max scan attempts reached. Prompting for Server-Hop.", 5)
+            local shouldServerHop = showConfirmationPrompt()
 
-        task.wait(rejoinDelay)
-
-        local success, err = pcall(function()
-            TeleportService:Teleport(game.PlaceId, LocalPlayer)
-        end)
-        if not success then
-            warn("Teleport failed after kick: " .. err)
-            sendNotification("⚠️ Error", "Teleport failed after kick. Retrying...", 3)
-            task.wait(5)
+            if shouldServerHop then
+                if LocalPlayer then
+                    print("User confirmed Server-Hop. Initiating teleport.")
+                    if pcall(function() TeleportService:Teleport(game.PlaceId, LocalPlayer) end) then
+                         print("Teleport initiated successfully.")
+                    else
+                        print("Teleport failed or is not supported by the current executor environment.")
+                    end
+                    
+                    for part, highlight in pairs(activeHighlights) do
+                        highlight:Destroy()
+                    end
+                    activeHighlights = {}
+                    screenGui:Destroy()
+                    break
+                else
+                    print("LocalPlayer not found, cannot initiate teleport.")
+                end
+            else
+                print("User chose NOT to Server-Hop. Resetting attempts and continuing scan.")
+                rejoinAttempts = 0
+                task.wait(rejoinDelay)
+            end
+        else
+            task.wait(rejoinDelay)
         end
     end
-
-    task.wait(1)
 end
