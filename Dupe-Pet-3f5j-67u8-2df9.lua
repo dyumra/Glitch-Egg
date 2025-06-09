@@ -1,4 +1,4 @@
-_G.TargetNames = {"Dragonfly", "Queen Bee"} -- Add all the Pet Egg names you want to find here. E.g., {"Dragonfly", "Queen Bee", "Phoenix Egg"}
+_G.TargetNames = {"Dragonfly", "Queen Bee", "Snail"} -- Add all the Pet Egg names you want to find here. E.g., {"Dragonfly", "Queen Bee", "Phoenix Egg"}
 
 
 
