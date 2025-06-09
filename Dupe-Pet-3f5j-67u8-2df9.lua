@@ -1,25 +1,45 @@
+-- Global settings for the script
 _G.TargetEggs = { -- Use a table of tables to store name and found status
     {name = "Queen Bee", found = false},
     {name = "Dragonfly", found = false}
 }
 
-local DataSer = require(game:GetService("ReplicatedStorage").Modules.DataService)
+-- Essential Roblox services
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TeleportService = game:GetService("TeleportService")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local StarterGui = game:GetService("StarterGui")
 local UserInputService = game:GetService("UserInputService")
 
+-- Script configuration
 local rejoinDelay = 1 -- Delay before attempting to server hop (seconds)
+local kickMessage = "System Notification: No designated target eggs were detected in this server. Initiating automatic server relocation."
 
--- Function to send in-game notifications
+-- Attempt to get DataService, add a check for robustness
+local DataServiceModule = nil
+local success, errorMessage = pcall(function()
+    DataServiceModule = require(ReplicatedStorage:WaitForChild("Modules"):WaitForChild("DataService"))
+end)
+
+if not success or not DataServiceModule then
+    sendNotification("🚫 Script Error", "Failed to load DataService. Script may not function correctly. Error: " .. (errorMessage or "Unknown"), 15)
+    print("Error: Could not load DataService. Script functionality may be impaired.")
+    -- You might want to break or disable features here if DataService is crucial
+end
+
+
+-- Function to send in-game notifications using SetCore
 local function sendNotification(title, text, duration, icon)
-    StarterGui:SetCore("SendNotification", {
-        Title = title,
-        Text = text,
-        Duration = duration or 5,
-        Icon = icon or ""
-    })
+    -- Wrap in pcall to prevent script breaking if SetCore is blocked or fails
+    pcall(function()
+        StarterGui:SetCore("SendNotification", {
+            Title = title,
+            Text = text,
+            Duration = duration or 5,
+            Icon = icon or ""
+        })
+    end)
 end
 
 -- Function to update the GUI text displaying current targets in the main frame
@@ -28,7 +48,7 @@ local function updateTargetListDisplay()
     for _, eggData in ipairs(_G.TargetEggs) do
         table.insert(currentTargetsNames, eggData.name)
     end
-    mainStatusLabel.Text = "Target Eggs: " .. table.concat(currentTargetsNames, ", ") .. "\nStatus: 🌐 Scanning Server...\nPowered by dyumra"
+    mainStatusLabel.Text = "Target Eggs: " .. table.concat(currentTargetsNames, ", ") .. "\nStatus: 🌐 Initializing...\nPowered by dyumra"
 end
 
 -- Function to update the right-side status display
@@ -40,10 +60,10 @@ local function updateRightStatusDisplay()
     rightStatusLabel.Text = statusText
 end
 
--- Function to smoothly transition RGB colors
+-- Function to smoothly transition RGB colors for TextLabels
 local function smoothRGBTransition(label)
     local hue = 0
-    while task.wait(0.05) do -- Adjust speed of color change
+    while task.wait(0.05) do -- Adjust speed of color change (lower for faster)
         hue = (hue + 0.01) % 1 -- Cycle hue from 0 to 1
         label.TextColor3 = Color3.fromHSV(hue, 1, 1) -- Set color using HSV
     end
@@ -285,7 +305,9 @@ end)
 -- Connect the ServerHop button click event
 serverHopButton.MouseButton1Click:Connect(function()
     sendNotification("🌐 System Notification", "Initiating manual server hop...", 3)
-    TeleportService:Teleport(game.PlaceId, LocalPlayer)
+    pcall(function() -- Wrap in pcall for teleport service in case it's blocked
+        TeleportService:Teleport(game.PlaceId, LocalPlayer)
+    end)
 end)
 
 
@@ -294,52 +316,71 @@ updateTargetListDisplay()
 updateRightStatusDisplay()
 
 -- --- Main Hunting Logic ---
-while true do
-    local foundAnyTargetEggInCurrentServer = false
-    local foundEggName = ""
+-- Only proceed if DataServiceModule was loaded successfully
+if DataServiceModule then
+    while true do
+        local foundAnyTargetEggInCurrentServer = false
+        local foundEggName = ""
+        
+        -- Reset found status for all eggs at the start of each server scan
+        for i, eggData in ipairs(_G.TargetEggs) do
+            _G.TargetEggs[i].found = false
+        end
+        updateRightStatusDisplay() -- Update right GUI to show all ❌
     
-    -- Reset found status for all eggs at the start of each server scan
-    for i, eggData in ipairs(_G.TargetEggs) do
-        _G.TargetEggs[i].found = false
-    end
-    updateRightStatusDisplay() -- Update right GUI to show all ❌
+        mainStatusLabel.Text = "Target Eggs: " .. table.concat(
+            (function() local names = {} for _, ed in ipairs(_G.TargetEggs) do table.insert(names, ed.name) end return names end)(), ", ") .. "\nStatus: 🌐 Scanning Server...\nPowered by dyumra"
+        sendNotification("🌐 System Notification", "Commencing server scan for target eggs.", 3, "rbxassetid://6034177218")
+    
+        -- Wrap DataService access in pcall for robustness
+        local savedObjects = nil
+        local successScan, scanError = pcall(function()
+            savedObjects = DataServiceModule:GetData().SavedObjects
+        end)
 
-    mainStatusLabel.Text = "Target Eggs: " .. table.concat(
-        (function() local names = {} for _, ed in ipairs(_G.TargetEggs) do table.insert(names, ed.name) end return names end)(), ", ") .. "\nStatus: 🌐 Scanning Server...\nPowered by dyumra"
-    sendNotification("🌐 System Notification", "Commencing server scan for target eggs.", 3, "rbxassetid://6034177218")
-
-    for _, obj in pairs(DataSer:GetData().SavedObjects) do
-        if obj.ObjectType == "PetEgg" then
-            if obj.Data.RandomPetData ~= nil and obj.Data.CanHatch then
-                -- Check if the egg's name is in our list of target names
-                for i, eggData in ipairs(_G.TargetEggs) do
-                    if obj.Data.RandomPetData.Name == eggData.name then
-                        _G.TargetEggs[i].found = true -- Mark this specific egg as found
-                        foundAnyTargetEggInCurrentServer = true
-                        foundEggName = eggData.name -- Keep track of the first one found for notification
-                        -- Do NOT update rightStatusDisplay immediately here in loop, do it once after scan for performance
+        if not successScan then
+            sendNotification("🚫 Scan Error", "Could not read game data. Retrying... Error: " .. (scanError or "Unknown"), 5)
+            print("Scan Error: " .. (scanError or "Unknown"))
+            -- Continue loop to retry or hop
+        elseif savedObjects then
+            for _, obj in pairs(savedObjects) do
+                if obj.ObjectType == "PetEgg" then
+                    if obj.Data.RandomPetData ~= nil and obj.Data.CanHatch then
+                        for i, eggData in ipairs(_G.TargetEggs) do
+                            if obj.Data.RandomPetData.Name == eggData.name then
+                                _G.TargetEggs[i].found = true
+                                foundAnyTargetEggInCurrentServer = true
+                                foundEggName = eggData.name
+                            end
+                        end
                     end
                 end
             end
         end
-    end
-    updateRightStatusDisplay() -- Update right GUI once after scan is complete
-
-    if foundAnyTargetEggInCurrentServer then
-        mainStatusLabel.Text = "Target Eggs: " .. table.concat(
-            (function() local names = {} for _, ed in ipairs(_G.TargetEggs) do table.insert(names, ed.name) end return names end)(), ", ") .. "\nStatus: 🎉 Target Found! " .. foundEggName .. "\nPowered by dyumra"
-        sendNotification("🎉 System Notification", "One or more target eggs identified! (" .. foundEggName .. ").", 10, "rbxassetid://6034177218")
-        
-        task.wait(10) -- Wait a bit if target found before re-scanning
-    else
-        mainStatusLabel.Text = "Target Eggs: " .. table.concat(
-            (function() local names = {} for _, ed in ipairs(_G.TargetEggs) do table.insert(names, ed.name) end return names end)(), ", ") .. "\nStatus: 🚫 No Target Found. Hopping...\nPowered by dyumra"
-        sendNotification("🚫 System Notification", "No designated target eggs detected. Initiating automatic server relocation.", 5, "rbxassetid://6034177218")
-        
-        TeleportService:Teleport(game.PlaceId, LocalPlayer)
-        
-        task.wait(rejoinDelay) 
-    end
+        updateRightStatusDisplay() -- Update right GUI once after scan is complete
     
-    task.wait(1) -- Short delay between scan attempts (if staying in server)
+        if foundAnyTargetEggInCurrentServer then
+            mainStatusLabel.Text = "Target Eggs: " .. table.concat(
+                (function() local names = {} for _, ed in ipairs(_G.TargetEggs) do table.insert(names, ed.name) end return names end)(), ", ") .. "\nStatus: 🎉 Target Found! " .. foundEggName .. "\nPowered by dyumra"
+            sendNotification("🎉 System Notification", "One or more target eggs identified! (" .. foundEggName .. ").", 10, "rbxassetid://6034177218")
+            
+            task.wait(10) -- Wait a bit if target found before re-scanning
+        else
+            mainStatusLabel.Text = "Target Eggs: " .. table.concat(
+                (function() local names = {} for _, ed in ipairs(_G.TargetEggs) do table.insert(names, ed.name) end return names end)(), ", ") .. "\nStatus: 🚫 No Target Found. Hopping...\nPowered by dyumra"
+            sendNotification("🚫 System Notification", "No designated target eggs detected. Initiating automatic server relocation.", 5, "rbxassetid://6034177218")
+            
+            pcall(function() -- Wrap in pcall for teleport service in case it's blocked
+                TeleportService:Teleport(game.PlaceId, LocalPlayer)
+            end)
+            
+            task.wait(rejoinDelay) 
+        end
+        
+        task.wait(1) -- Short delay between scan attempts (if staying in server)
+    end
+else
+    -- If DataServiceModule failed to load, display an error message and stop the main loop
+    mainStatusLabel.Text = "Target Eggs: N/A\nStatus: ❌ Error: DataService Load Failed!\nPowered by dyumra"
+    sendNotification("🚫 Script Fatal Error", "DataService could not be loaded. Please ensure the game's API structure is compatible or contact support.", 30)
 end
