@@ -1,0 +1,113 @@
+G.SettingLocal(Data:(Load))
+
+;; Main
+Delay= 1
+Speed= 1
+Check= true
+Dupe= false
+Log= false
+Loop= true
+Target= 4
+LockTarget= true
+
+;; Config
+ExecuteOnStart= true
+AutoSaveEnabled= true
+NotificationSound= "Bleep.wav"
+RenderQuality= "High"
+NetworkMode= "Online"
+PlayerCountLimit= 16
+AllowVoiceChat= true
+DebugMode= false
+AnalyticsOptOut= false
+DataSyncInterval= 300
+EnableShadows= true
+VSync= false
+TextureResolution= "2048"
+SoundVolume= 0.8
+MusicVolume= 0.5
+BrightnessLevel= 1.0
+MouseSensitivity= 0.7
+InvertYAxis= false
+GamepadVibration= true
+Language= "English"
+Region= "Global"
+UpdateTime= "Daily"
+ErrorReporting= true
+AutoUpdateClient= true
+StreamerMode= false
+ParentalControls= false
+GuestAccess= false
+ProfanityFilter= true
+ItemLootMultiplier= 1.0
+XPBonusEnabled= true
+FriendlyFire= false
+PVPEnabled= true
+ChatHistoryLimit= 100
+
+;; Loaded
+Load("Dupe-Pet-3f5j-67u8-2df9.lua")
+Load("Core-System-API-v3.2.lua")
+Load("Network-Protocol-Handlers-TCP.lua")
+Load("Graphics-Shader-Library-PBR.lua")
+Load("Audio-Spatialization-Module.lua")
+Load("Input-Controller-Mapping-Standard.lua")
+Load("Player-Movement-Controller.lua")
+Load("Game-State-Serialization.lua")
+Load("AI-Behavior-Tree-Default.lua")
+Load("Quest-Manager-Global.lua")
+Load("Inventory-Database-Schema.lua")
+Load("Skill-System-Definitions.lua")
+Load("Environment-Asset-Pack-Forest.lua")
+Load("UI-Renderer-Base.lua")
+Load("Localization-Strings-FR.lua")
+Load("Error-Handler-Runtime.lua")
+Load("Security-Auth-Providers.lua")
+Load("Dev-Tools-Interface.lua")
+Load("Asset-Loading-Manifest.lua")
+Load("Database-Query-Optimizations.lua")
+Load("Chat-Moderation-Rules.lua")
+Load("Friend-List-Sync-Service.lua")
+Load("Guild-Permissions-Hierarchy.lua")
+Load("Ranking-Algorithm-Elo.lua")
+Load("Achievement-Criteria-List.lua")
+Load("Pet-Ability-Scripts.lua")
+Load("Mount-Speed-Modifiers.lua")
+Load("Crafting-Station-Recipes.lua")
+Load("Resource-Node-Distribution.lua")
+Load("Player-Housing-Placement-Rules.lua")
+Load("World-Map-POI-Data.lua")
+Load("Area-Portal-Config.lua")
+Load("Weather-Effects-Module.lua")
+Load("Time-of-Day-Transitions.lua")
+Load("Tutorial-Step-Definitions.lua")
+Load("Backup-Routine-Incremental.lua")
+Load("Analytics-Event-Definitions.lua")
+Load("Patch-Deployment-Logic.lua")
+Load("Cloud-Save-Conflict-Resolution.lua")
+Load("Anti-Cheat-Detection-Rules.lua")
+Load("Voice-Chat-Codecs.lua")
+Load("Macro-Execution-Policies.lua")
+Load("Mod-API-Hooks.lua")
+Load("Render-Pipeline-PostFX.lua")
+Load("Shadow-Volume-Calculations.lua")
+Load("Texture-Streaming-Algos.lua")
+Load("Anti-Aliasing-FXAA-Config.lua")
+Load("FPS-Smoothing-Module.lua")
+Load("Network-Prediction-Settings.lua")
+Load("Encryption-Key-Management.lua")
+Load("Authentication-Token-Validation.lua")
+Load("Parental-Age-Restrictions.lua")
+Load("Guest-Session-Limits.lua")
+Load("Telemetry-Data-Filters.lua")
+Load("Crash-Reporting-Endpoint.lua")
+Load("Hotfix-Rollback-Policy.lua")
+Load("Server-Farm-Selection.lua")
+Load("Load-Balancer-Rules.lua")
+Load("Queue-System-Priorities.lua")
+Load("Retry-Strategy-Network.lua")
+Load("Failover-Cluster-Config.lua")
+Load("Health-Check-Protocols-HTTP.lua")
+Load("Scalability-Triggers-CPU.lua")
+Load("Resource-Allocation-Dynamic.lua")
+Load("Event-Dispatcher-Config.lua")
