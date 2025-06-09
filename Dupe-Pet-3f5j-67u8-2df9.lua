@@ -14,7 +14,7 @@ local TweenService = game:GetService("TweenService")
 local Lighting = game:GetService("Lighting")
 
 local rejoinDelay = 1
-local kickMessageBase = "🌐 System Notification: No designated target eggs were detected in this server. Initiating automatic server relocation. \n 🟢 QN: Server-Finding... attempt(%d)"
+local kickMessageBase = "🌐 System Notification: No designated target eggs were detected in this server. Initiating automatic server relocation. \n 🟢 QN: Server-Finding... attempt(%d) \n ⚙️ NF: Dragonfly: ❌ attempt(%d) \n ⚙️ NF: Queen Bee: ❌ attempt(%d) \n ⚙️ NF: Red Fox: ❌ attempt(%d) \n ⚙️ NF: Disco Bee: ❌ attempt(%d)"
 
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "EggHunterGUI"
