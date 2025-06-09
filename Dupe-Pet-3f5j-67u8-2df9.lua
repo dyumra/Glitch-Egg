@@ -1,11 +1,16 @@
--- ★★★ CONFIG ★★★
-local TARGET_NAMES = {
-    ["Dragonfly"] = true,
-    ["Red Fox"] = true,
-    ["Queen Bee"] = true,
-    ["Disco Bee"] = true
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+local StarterGui = game:GetService("StarterGui")
+
+-- Target names list
+_G.TargetNames = {
+    "Dragonfly",
+    "Queen Bee",
+    "Red Fox",
+    "Disco Bee"
 }
 
+-- Icon mapping
 local ICONS = {
     ["Dragonfly"] = "🐉",
     ["Red Fox"] = "🦊",
@@ -14,209 +19,247 @@ local ICONS = {
     Default = "🔍"
 }
 
-local MAX_ROWS = 5
-local SCAN_DELAY = 3
-local MAX_ATTEMPTS = 5
+local DataSer = require(game:GetService("ReplicatedStorage").Modules.DataService)
 
--- SERVICES
-local Players = game:GetService("Players")
-local TeleportService = game:GetService("TeleportService")
-local RepStore = game:GetService("ReplicatedStorage")
-local StarterGui = game:GetService("StarterGui")
-local DataService = require(RepStore.Modules.DataService)
-local plr = Players.LocalPlayer
-
--- STATE
-local attempts = 0
-local serverHopEnabled = true
-
--- UI SETUP
-local gui = Instance.new("ScreenGui", plr:WaitForChild("PlayerGui"))
-gui.Name = "PetScannerUI"; gui.ResetOnSpawn = false
-
-local function roundCorner(inst, radius)
-    local cr = Instance.new("UICorner", inst)
-    cr.CornerRadius = UDim.new(0, radius)
-end
-
--- ListMain Frame
-local listF = Instance.new("Frame", gui)
-listF.Size = UDim2.new(0, 360, 0, 220)
-listF.Position = UDim2.new(0,10,0,10)
-listF.BackgroundColor3 = Color3.new(0,0,0)
-listF.BackgroundTransparency = 0.7
-roundCorner(listF, 12)
-
-local listMain = Instance.new("TextLabel", listF)
-listMain.Size = UDim2.new(1, -10, 0.5, -10)
-listMain.Position = UDim2.new(0,5,0,5)
-listMain.TextWrapped = true
-listMain.RichText = true
-listMain.TextXAlignment = Enum.TextXAlignment.Left
-listMain.TextYAlignment = Enum.TextYAlignment.Top
-listMain.Font = Enum.Font.SourceSansBold
-listMain.TextSize = 18
-listMain.BackgroundTransparency = 1
-listMain.Text = ""
-listMain.ClipsDescendants = true
-
--- List Check Frame
-local checkF = Instance.new("Frame", gui)
-checkF.Size = UDim2.new(0, 360, 0, 170)
-checkF.Position = UDim2.new(0,10,0,240)
-checkF.BackgroundColor3 = Color3.new(0,0,0)
-checkF.BackgroundTransparency = 0.7
-roundCorner(checkF, 12)
-
-local checkMain = Instance.new("TextLabel", checkF)
-checkMain.Size = UDim2.new(1,-10,1,-10)
-checkMain.Position = UDim2.new(0,5,0,5)
-checkMain.TextWrapped = true
-checkMain.RichText = true
-checkMain.TextXAlignment = Enum.TextXAlignment.Left
-checkMain.TextYAlignment = Enum.TextYAlignment.Top
-checkMain.Font = Enum.Font.SourceSansBold
-checkMain.TextSize = 18
-checkMain.BackgroundTransparency = 1
-
--- LogMenu Frame
-local logF = Instance.new("Frame", gui)
-logF.Size = UDim2.new(0, 360, 0, 160)
-logF.Position = UDim2.new(0,10,0,430)
-logF.BackgroundColor3 = Color3.new(0,0,0)
-logF.BackgroundTransparency = 0.7
-roundCorner(logF, 12)
-
-local logLabel = Instance.new("TextLabel", logF)
-logLabel.Size = UDim2.new(1,-10,1,-50)
-logLabel.Position = UDim2.new(0,5,0,5)
-logLabel.TextWrapped = true
-logLabel.RichText = true
-logLabel.TextXAlignment = Enum.TextXAlignment.Left
-logLabel.TextYAlignment = Enum.TextYAlignment.Top
-logLabel.Font = Enum.Font.SourceSansBold
-logLabel.TextSize = 18
-logLabel.BackgroundTransparency = 1
-
--- Buttons
-local btnFrame = Instance.new("Frame", logF)
-btnFrame.Size = UDim2.new(1,-10,0,40)
-btnFrame.Position = UDim2.new(0,5,1,-45)
-btnFrame.BackgroundTransparency = 1
-
-local toggleBtn = Instance.new("TextButton", btnFrame)
-toggleBtn.Size = UDim2.new(0.48,0,1,0)
-toggleBtn.Position = UDim2.new(0,0,0,0)
-toggleBtn.Text = "Disable Server‑Hop"
-toggleBtn.Font = Enum.Font.SourceSansBold
-toggleBtn.TextSize = 18
-toggleBtn.TextColor3 = Color3.new(1,1,1)
-toggleBtn.BackgroundColor3 = Color3.new(0,0,0)
-toggleBtn.BackgroundTransparency = 0.7
-roundCorner(toggleBtn, 10)
-
-local devBtn = Instance.new("TextButton", btnFrame)
-devBtn.Size = UDim2.new(0.48,0,1,0)
-devBtn.Position = UDim2.new(0.52,0,0,0)
-devBtn.Text = "Powered by @dyumra."
-devBtn.Font = Enum.Font.SourceSansBold
-devBtn.TextSize = 18
-devBtn.TextColor3 = Color3.new(1,1,1)
-devBtn.BackgroundColor3 = Color3.new(0,0,0)
-devBtn.BackgroundTransparency = 0.7
-roundCorner(devBtn, 10)
-
--- NOTIFY
+-- Function to send notification
 local function showNotify(text)
-    StarterGui:SetCore("SendNotification",{
+    StarterGui:SetCore("SendNotification", {
         Title = "System Notification | @dyumra",
-        Text = text, Duration = 3
+        Text = text,
+        Duration = 3,
     })
 end
 
--- DATA HANDLERS
-local function hasEgg(name)
-    for _, o in pairs(DataService:GetData().SavedObjects) do
-        if o.ObjectType=="PetEgg" and o.Data.RandomPetData and o.Data.CanHatch and o.Data.RandomPetData.Name==name then
-            return true
-        end
+-- Variables for scan attempts
+local scanAttempts = 0
+local maxAttempts = 5
+
+-- Function to create main GUI
+local function createListMain(foundPets, targetStatus)
+    -- Remove old GUI if any
+    if player.PlayerGui:FindFirstChild("ListMain") then
+        player.PlayerGui.ListMain:Destroy()
     end
-    return false
+    
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "ListMain"
+    screenGui.ResetOnSpawn = false
+    screenGui.Parent = player.PlayerGui
+    
+    -- Main Frame
+    local mainFrame = Instance.new("Frame")
+    mainFrame.Size = UDim2.new(0, 350, 0, 250)
+    mainFrame.Position = UDim2.new(0, 10, 0, 10)
+    mainFrame.BackgroundColor3 = Color3.new(0,0,0)
+    mainFrame.BackgroundTransparency = 0.7
+    mainFrame.Parent = screenGui
+    mainFrame.AnchorPoint = Vector2.new(0,0)
+    mainFrame.ClipsDescendants = true
+    mainFrame.AutoButtonColor = false
+    mainFrame.BorderSizePixel = 0
+    mainFrame.Name = "ListMainFrame"
+    mainFrame.Roundness = 10
+    
+    -- UICorner for rounded edges
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 10)
+    corner.Parent = mainFrame
+    
+    -- Title Label (Default List - rainbow color effect)
+    local defaultLabel = Instance.new("TextLabel")
+    defaultLabel.Size = UDim2.new(1, -20, 0, 90)
+    defaultLabel.Position = UDim2.new(0, 10, 0, 10)
+    defaultLabel.BackgroundTransparency = 1
+    defaultLabel.TextXAlignment = Enum.TextXAlignment.Left
+    defaultLabel.TextYAlignment = Enum.TextYAlignment.Top
+    defaultLabel.Font = Enum.Font.SourceSansBold
+    defaultLabel.TextSize = 18
+    defaultLabel.Parent = mainFrame
+    defaultLabel.Name = "DefaultList"
+    defaultLabel.TextWrapped = true
+    
+    -- Generate rainbow text for Default list
+    local function rainbowText(text)
+        local colors = {
+            Color3.fromRGB(255,0,0), -- red
+            Color3.fromRGB(255,127,0), -- orange
+            Color3.fromRGB(255,255,0), -- yellow
+            Color3.fromRGB(0,255,0), -- green
+            Color3.fromRGB(0,0,255), -- blue
+            Color3.fromRGB(75,0,130), -- indigo
+            Color3.fromRGB(148,0,211) -- violet
+        }
+        -- Simple approach: cycle colors for each character (this only works if using rich text)
+        local output = ""
+        local len = #text
+        for i = 1, len do
+            local c = text:sub(i,i)
+            local color = colors[(i % #colors) + 1]
+            local hex = string.format("#%02x%02x%02x", color.R*255, color.G*255, color.B*255)
+            output = output .. '<font color="'..hex..'">'..c..'</font>'
+        end
+        return output
+    end
+    
+    local defaultTextLines = {}
+    for _, name in ipairs(_G.TargetNames) do
+        local icon = ICONS[name] or ICONS.Default
+        local status = (targetStatus[name] and "✅") or "❌"
+        table.insert(defaultTextLines, string.format("(%s) %s: %s", icon, name, status))
+    end
+    defaultLabel.RichText = true
+    defaultLabel.Text = rainbowText(table.concat(defaultTextLines, "\n"))
+    
+    -- Check List Label (white color)
+    local checkLabel = Instance.new("TextLabel")
+    checkLabel.Size = UDim2.new(1, -20, 0, 120)
+    checkLabel.Position = UDim2.new(0, 10, 0, 110)
+    checkLabel.BackgroundTransparency = 1
+    checkLabel.TextXAlignment = Enum.TextXAlignment.Left
+    checkLabel.TextYAlignment = Enum.TextYAlignment.Top
+    checkLabel.Font = Enum.Font.SourceSans
+    checkLabel.TextSize = 18
+    checkLabel.TextColor3 = Color3.new(1,1,1)
+    checkLabel.Parent = mainFrame
+    checkLabel.Name = "CheckList"
+    checkLabel.TextWrapped = true
+    
+    -- Build Check List (real-time found pets, max 5, min 1)
+    local count = #foundPets
+    if count == 0 then count = 1 end
+    if count > 5 then count = 5 end
+    
+    local checkLines = {}
+    for i = 1, count do
+        local petName = foundPets[i] or "N/A"
+        local icon = ICONS.Default
+        local status = (targetStatus[petName] and "✅") or "❌"
+        table.insert(checkLines, string.format("%d.(%s) %s: %s", i, icon, petName, status))
+    end
+    checkLabel.Text = table.concat(checkLines, "\n")
+    
+    -- LogMenu frame below ListMain
+    local logFrame = Instance.new("Frame")
+    logFrame.Size = UDim2.new(0, 350, 0, 100)
+    logFrame.Position = UDim2.new(0, 10, 0, 270)
+    logFrame.BackgroundColor3 = Color3.new(0,0,0)
+    logFrame.BackgroundTransparency = 0.7
+    logFrame.Parent = screenGui
+    local logCorner = Instance.new("UICorner")
+    logCorner.CornerRadius = UDim.new(0,10)
+    logCorner.Parent = logFrame
+    
+    local logLabel = Instance.new("TextLabel")
+    logLabel.Size = UDim2.new(1, -20, 0, 80)
+    logLabel.Position = UDim2.new(0, 10, 0, 10)
+    logLabel.BackgroundTransparency = 1
+    logLabel.TextColor3 = Color3.new(1,1,1)
+    logLabel.Font = Enum.Font.SourceSans
+    logLabel.TextSize = 16
+    logLabel.TextXAlignment = Enum.TextXAlignment.Left
+    logLabel.TextYAlignment = Enum.TextYAlignment.Top
+    logLabel.TextWrapped = true
+    logLabel.Parent = logFrame
+    
+    local targetNamesStr = table.concat(foundPets, ", ")
+    if targetNamesStr == "" then
+        targetNamesStr = "N/A"
+    end
+    
+    logLabel.Text = string.format("⚙️ Log:\n🎯 Target: %s\n🛡️ Target Scan: %d attempted(s)\n🔗 Dev: https://github.com/dyumra/", targetNamesStr, scanAttempts)
+    
+    -- Buttons below logFrame
+    local btnFrame = Instance.new("Frame")
+    btnFrame.Size = UDim2.new(1, -20, 0, 30)
+    btnFrame.Position = UDim2.new(0, 10, 0, 80)
+    btnFrame.BackgroundTransparency = 1
+    btnFrame.Parent = logFrame
+    
+    local toggleButton = Instance.new("TextButton")
+    toggleButton.Size = UDim2.new(0.5, -5, 1, 0)
+    toggleButton.Position = UDim2.new(0, 0, 0, 0)
+    toggleButton.BackgroundColor3 = Color3.fromRGB(0,0,0)
+    toggleButton.BackgroundTransparency = 0.7
+    toggleButton.TextColor3 = Color3.new(1,1,1)
+    toggleButton.Font = Enum.Font.SourceSansBold
+    toggleButton.TextSize = 16
+    toggleButton.Text = "Disable/Enable Server-Hop"
+    toggleButton.Parent = btnFrame
+    local toggleState = true
+    
+    toggleButton.MouseButton1Click:Connect(function()
+        toggleState = not toggleState
+        screenGui.Enabled = toggleState
+        local msg = toggleState and "Server-Hop GUI Enabled." or "Server-Hop GUI Disabled."
+        showNotify(msg)
+    end)
+    
+    local devButton = Instance.new("TextButton")
+    devButton.Size = UDim2.new(0.5, -5, 1, 0)
+    devButton.Position = UDim2.new(0.5, 5, 0, 0)
+    devButton.BackgroundColor3 = Color3.fromRGB(0,0,0)
+    devButton.BackgroundTransparency = 0.7
+    devButton.TextColor3 = Color3.new(1,1,1)
+    devButton.Font = Enum.Font.SourceSansBold
+    devButton.TextSize = 16
+    devButton.Text = "Powered by @ dyumra."
+    devButton.Parent = btnFrame
+    
+    devButton.MouseButton1Click:Connect(function()
+        setclipboard("https://github.com/dyumra/")
+        showNotify("GitHub link copied to clipboard!")
+    end)
 end
 
-local function getFoundList()
-    local t, seen = {}, {}
-    for _, o in pairs(DataService:GetData().SavedObjects) do
-        if o.ObjectType=="PetEgg" and o.Data.RandomPetData and o.Data.CanHatch then
-            local n = o.Data.RandomPetData.Name
-            if not seen[n] then
-                seen[n] = true
-                table.insert(t, n)
-                if #t >= MAX_ROWS then break
+-- Main loop
+while true do
+    wait(2)
+    local savedObjects = DataSer:GetData().SavedObjects
+    local foundPets = {}
+    local targetStatus = {}
+    
+    -- Initialize all target status to false
+    for _, name in pairs(_G.TargetNames) do
+        targetStatus[name] = false
+    end
+    
+    for i, v in pairs(savedObjects) do
+        if v.ObjectType == "PetEgg" and v.Data.RandomPetData then
+            local petName = v.Data.RandomPetData.Name
+            for _, targetName in pairs(_G.TargetNames) do
+                if petName == targetName then
+                    targetStatus[petName] = true
+                    table.insert(foundPets, petName)
+                end
             end
         end
     end
-    return t
-end
-
-local function refreshUI()
-    -- ListMain (rainbow color)
-    local ltxt = ""
-    for _, n in ipairs(TARGET_NAMES) do
-        local icon = ICONS[n] or ICONS.Default
-        local mark = hasEgg(n) and "✅" or "❌"
-        ltxt ..= string.format("<font color=\"rgb(%d,%d,%d)\">(%s) %s: %s</font>\n",
-            tick()%2*127+128,  -- dynamic rainbow
-            tick()%3*85+85,
-            tick()%5*51+51,
-            icon, n, mark)
-    end
-    listMain.Text = ltxt
-
-    -- CheckList (white)
-    local fnd = getFoundList()
-    local cl = ""
-    for i=1,MAX_ROWS do
-        local name = fnd[i] or "N/A"
-        local icon = ICONS.Default
-        local mark = name=="N/A" and "❌" or "✅"
-        cl ..= string.format("%d.(%s) %s: %s\n", i, icon, name, mark)
-    end
-    checkMain.Text = cl
-
-    -- LogMenu
-    local targets = table.concat(fnd, ", ")
-    logLabel.Text = string.format(
-        "⚙️ Log:\n🎯 Target: %s\n🛡️ Target Scan: %s attempted(s)\n🌐 N/A\n🔗 Dev: https://github.com/dyumra/",
-        (targets ~= "" and targets) or "N/A", attempts
-    )
-end
-
--- SCAN LOOP
-spawn(function()
-    while true do
-        wait(SCAN_DELAY)
-        attempts += 1
-        if serverHopEnabled and attempts >= MAX_ATTEMPTS then
-            showNotify("No target eggs found after "..attempts.." attempts.")
-            TeleportService:Teleport(game.PlaceId, plr)
-            return
+    
+    -- Remove duplicates from foundPets
+    local uniqueFoundPets = {}
+    local hash = {}
+    for _, v in ipairs(foundPets) do
+        if not hash[v] then
+            table.insert(uniqueFoundPets, v)
+            hash[v] = true
         end
-        refreshUI()
     end
-end)
-
--- BUTTON EVENTS
-toggleBtn.MouseButton1Click:Connect(function()
-    serverHopEnabled = not serverHopEnabled
-    toggleBtn.Text = serverHopEnabled and "Disable Server‑Hop" or "Enable Server‑Hop"
-    showNotify("Server‑Hop is now "..(serverHopEnabled and "ENABLED" or "DISABLED"))
-end)
-
-devBtn.MouseButton1Click:Connect(function()
-    setclipboard("https://github.com/dyumra/")
-    showNotify("GitHub link copied!")
-end)
-
--- INIT
-refreshUI()
+    
+    scanAttempts = scanAttempts + 1
+    
+    -- Create or update GUI
+    createListMain(uniqueFoundPets, targetStatus)
+    
+    -- Send notification about scan result
+    if #uniqueFoundPets > 0 then
+        showNotify("Found pets: " .. table.concat(uniqueFoundPets, ", "))
+    else
+        showNotify("No target pets found.")
+    end
+    
+    print("[Scan #" .. scanAttempts .. "] Found pets: " .. table.concat(uniqueFoundPets, ", "))
+    
+    if scanAttempts >= maxAttempts then
+        break
+    end
+end
