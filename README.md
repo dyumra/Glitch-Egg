@@ -1,5 +1,5 @@
 ## Status: 🟢 | Glitch-Egg
-**About Roblox: Grow a Garden**
+**📊 About Roblox: [🌻] Grow a Garden 🐝**
 
 ## 📌 - Loadstring
 **🔍 Auto Server-Hop Powered by @ dyumra**
